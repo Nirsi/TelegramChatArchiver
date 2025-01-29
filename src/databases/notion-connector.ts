@@ -1,6 +1,6 @@
-// notion-connector.ts
 import { Client } from "@notionhq/client";
 import type { GetDatabaseResponse } from "@notionhq/client/build/src/api-endpoints";
+import type { DbMessage } from "../types/db-message";
 
 export class NotionConnector {
   private notion: Client;
@@ -57,13 +57,12 @@ export class NotionConnector {
   }
 
   /**
-   * Create a new page in a database
-   * @param title The title of the new page
-   * @param text The text content to be stored
-   * @returns A promise that resolves with the created page
+   * Create a new page in a database specific for DbMessage type
+   * @param {DbMessage} dbMessage The message to create a page for
+   * @returns {Promise<any>} A promise that resolves with the created page
    * @throws Error if the page creation fails
    */
-  async createDatabasePage(title: string, text: string) {
+  async createDatabasePageFromMessageDb(dbMessage: DbMessage): Promise<any> {
     try {
       const response = await this.notion.pages.create({
         parent: {
@@ -74,16 +73,54 @@ export class NotionConnector {
             title: [
               {
                 text: {
-                  content: title,
+                  content: dbMessage.chat.groupName,
                 },
               },
             ],
           },
-          Text: {
+          messageId: {
+            number: dbMessage.messageId,
+          },
+          isBot: {
+            checkbox: dbMessage.from.isBot,
+          },
+          firstName: {
             rich_text: [
               {
                 text: {
-                  content: text,
+                  content: dbMessage.from.firstName || "",
+                },
+              },
+            ],
+          },
+          lastName: {
+            rich_text: [
+              {
+                text: {
+                  content: dbMessage.from.lastName || "",
+                },
+              },
+            ],
+          },
+          username: {
+            rich_text: [
+              {
+                text: {
+                  content: dbMessage.from.username,
+                },
+              },
+            ],
+          },
+          date: {
+            date: {
+              start: dbMessage.date.toISOString(),
+            },
+          },
+          text: {
+            rich_text: [
+              {
+                text: {
+                  content: dbMessage.text,
                 },
               },
             ],

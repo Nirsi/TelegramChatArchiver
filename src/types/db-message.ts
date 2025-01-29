@@ -1,39 +1,37 @@
 import type { Message } from "grammy/types";
 
 export type DbMessage = {
-  message_id: number;
+  messageId: number;
   from: {
-    id: number;
-    is_bot: boolean;
-    first_name?: string;
-    last_name?: string;
+    isBot: boolean;
+    firstName?: string;
+    lastName?: string;
     username: string;
   };
+  //Chat object contains info about the room/group where the message was send
   chat: {
-    id: number;
-    title: string;
+    //name of the room/group
+    groupName: string;
   };
+  //Date when the message was send in the format of a Date object (2010-10-10T10:00:00.000Z)
   date: Date;
+  //Text send by user
   text: string;
 };
 
 export function fromTelegramMessage(message: Message): DbMessage {
   return {
-    message_id: message.message_id,
+    messageId: message.message_id,
     from: {
-      id: message.from!.id,
-      is_bot: message.from!.is_bot,
-      first_name: message.from!.first_name,
-      last_name: message.from!.last_name,
+      isBot: message.from!.is_bot,
+      firstName: message.from!.first_name,
+      lastName: message.from!.last_name,
       username: message.from!.username!,
     },
     chat: {
-      id: message.chat.id,
-      title: message.chat.title!,
+      groupName: message.chat.title!,
     },
-    //Date when the message was send in the format of a Date object (2010-10-10T10:00:00.000Z)
     date: new Date(message.date * 1000),
-    //Text send by user
     text: message.text!,
   };
 }
