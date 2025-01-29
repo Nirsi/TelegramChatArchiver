@@ -1,0 +1,18 @@
+{
+  "name": "telegramchatarchiver",
+  "module": "src/app.ts",
+  "type": "module",
+  "scripts": {
+    "start": "bun run src/app.ts"
+  },
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^5.0.0"
+  },
+  "dependencies": {
+    "@notionhq/client": "^2.2.15",
+    "grammy": "^1.34.1"
+  }
+}
