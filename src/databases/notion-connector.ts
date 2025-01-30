@@ -2,9 +2,23 @@ import { Client } from "@notionhq/client";
 import type { GetDatabaseResponse } from "@notionhq/client/build/src/api-endpoints";
 import type { DbMessage } from "../types/db-message";
 
+/**
+ * NotionConnector is used to connect to the Notion database, where it`s shape is specified for this exact bot
+ * Shape of database cannot be changed due to constrains of the data collected.
+ */
 export class NotionConnector {
   private notion: Client;
   private databaseId: string;
+  private expectedProperties: Record<string, string> = {
+    groupName: "title",
+    messageId: "number",
+    isBot: "checkbox",
+    firstName: "rich_text",
+    lastName: "rich_text",
+    username: "rich_text",
+    date: "date",
+    text: "rich_text",
+  };
 
   constructor() {
     if (!process.env.NOTION_TOKEN) {
@@ -21,6 +35,9 @@ export class NotionConnector {
     console.log(
       `Notion client initialized with id ${process.env.NOTION_TOKEN} and databaseId is set to ${this.databaseId}`,
     );
+
+    // Verify the database structure when the connector is created
+    this.verifyDatabaseStructure();
   }
 
   /**
@@ -38,6 +55,55 @@ export class NotionConnector {
       console.error("Error getting database:", error);
       throw error;
     }
+  }
+
+  /**
+   * Verify the structure of the notion database to ensure it matches
+   * the expected format for the bot. Each property is checked by name
+   * and type
+   * @throws Error if the database structure has any issues
+   */
+  async verifyDatabaseStructure() {
+    const database = await this.getDatabase();
+    console.log("Verifying database structure...");
+
+    const issues: string[] = [];
+    const databaseProperties = database.properties;
+
+    for (const [propName, expectedType] of Object.entries(
+      this.expectedProperties,
+    )) {
+      const actualProperty = databaseProperties[propName];
+
+      if (!actualProperty) {
+        issues.push(
+          `Missing property: "${propName}" (should be type "${expectedType}")`,
+        );
+      } else if (actualProperty.type !== expectedType) {
+        issues.push(
+          `Wrong type for "${propName}": expected "${expectedType}", got "${actualProperty.type}"`,
+        );
+      }
+    }
+
+    const unexpectedProperties = Object.keys(databaseProperties).filter(
+      (prop) => !this.expectedProperties.hasOwnProperty(prop),
+    );
+    if (unexpectedProperties.length > 0) {
+      issues.push(
+        `Unexpected properties found: ${unexpectedProperties.join(", ")}`,
+      );
+    }
+
+    if (issues.length > 0) {
+      console.error("Database structure verification failed:");
+      issues.forEach((issue) => console.error(`- ${issue}`));
+      throw new Error(
+        `Database structure is invalid. Found ${issues.length} issue(s). Check console for details.`,
+      );
+    }
+
+    console.log("Database structure verified successfully.");
   }
 
   /**
