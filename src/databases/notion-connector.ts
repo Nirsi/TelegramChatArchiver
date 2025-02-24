@@ -200,7 +200,11 @@ export class NotionConnector {
     }
   }
 
-  // Helper function to format database ID
+  /**
+   * Converts a Notion API key to the format expected by the API
+   * @param { string } id Notion API key
+   * @returns { string } Formatted Notion API key
+   */
   private formatDatabaseId(id: string): string {
     // Remove any existing hyphens and spaces
     const cleanId = id.replace(/-/g, "").replace(/ /g, "");
@@ -216,6 +220,6 @@ export class NotionConnector {
       ].join("-");
     }
 
-    return id; // Return original if not matching expected format
+    return id;
   }
 }

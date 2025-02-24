@@ -1,5 +1,8 @@
 import type { Message } from "grammy/types";
 
+/**
+ * Type representing Notion Database datatype which is used for storing messages
+ */
 export type DbMessage = {
   messageId: number;
   from: {
@@ -19,6 +22,11 @@ export type DbMessage = {
   text: string;
 };
 
+/**
+ * Convert Telegram message object to Notino Database message object
+ * @param { Message } message
+ * @returns { DbMessage } Notino Database message object
+ */
 export function fromTelegramMessage(message: Message): DbMessage {
   return {
     messageId: message.message_id,
