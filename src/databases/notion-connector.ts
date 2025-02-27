@@ -1,10 +1,15 @@
 import { Client } from "@notionhq/client";
-import type { GetDatabaseResponse } from "@notionhq/client/build/src/api-endpoints";
+import type {
+  CreatePageResponse,
+  GetDatabaseResponse,
+} from "@notionhq/client/build/src/api-endpoints";
 import type { DbMessage } from "../types/db-message";
 
 /**
  * NotionConnector is used to connect to the Notion database, where it`s shape is specified for this exact bot
  * Shape of database cannot be changed due to constrains of the data collected.
+ * @requires process.env.NOTION_TOKEN - Notion API token
+ * @requires process.env.NOTION_DATABASE_ID - Notion Database ID
  */
 export class NotionConnector {
   private notion: Client;
@@ -45,7 +50,7 @@ export class NotionConnector {
    * @returns A promise that resolves with the database information
    * @throws Error if the database retrieval fails
    */
-  async getDatabase(): Promise<GetDatabaseResponse> {
+  public async getDatabase(): Promise<GetDatabaseResponse> {
     try {
       const response = await this.notion.databases.retrieve({
         database_id: this.databaseId,
@@ -58,12 +63,17 @@ export class NotionConnector {
   }
 
   /**
+   * Build database to be by the specifications.
+   */
+  public async buildDatabase(): Promise<any> {}
+
+  /**
    * Verify the structure of the notion database to ensure it matches
    * the expected format for the bot. Each property is checked by name
    * and type
    * @throws Error if the database structure has any issues
    */
-  async verifyDatabaseStructure() {
+  public async verifyDatabaseStructure() {
     const database = await this.getDatabase();
     console.log("Verifying database structure...");
 
@@ -110,7 +120,7 @@ export class NotionConnector {
    * Query a database
    * @param databaseId The ID of the database to query
    */
-  async queryDatabase() {
+  public async queryDatabase() {
     try {
       const response = await this.notion.databases.query({
         database_id: this.databaseId,
@@ -125,10 +135,12 @@ export class NotionConnector {
   /**
    * Create a new page in a database specific for DbMessage type
    * @param {DbMessage} dbMessage The message to create a page for
-   * @returns {Promise<any>} A promise that resolves with the created page
+   * @returns {Promise<CreatePageResponse>} A promise that resolves with the created page
    * @throws Error if the page creation fails
    */
-  async createDatabasePageFromMessageDb(dbMessage: DbMessage): Promise<any> {
+  public async createDatabasePageFromMessageDb(
+    dbMessage: DbMessage,
+  ): Promise<CreatePageResponse> {
     try {
       const response = await this.notion.pages.create({
         parent: {
@@ -202,12 +214,12 @@ export class NotionConnector {
 
   /**
    * Converts a Notion API key to the format expected by the API
-   * @param { string } id Notion API key
-   * @returns { string } Formatted Notion API key
+   * @param {string} apiKey Notion API key
+   * @returns {string} Formatted Notion API key
    */
-  private formatDatabaseId(id: string): string {
+  private formatDatabaseId(apiKey: string): string {
     // Remove any existing hyphens and spaces
-    const cleanId = id.replace(/-/g, "").replace(/ /g, "");
+    const cleanId = apiKey.replace(/-/g, "").replace(/ /g, "");
 
     // If the ID is already 32 characters, format it with hyphens
     if (cleanId.length === 32) {
@@ -220,6 +232,6 @@ export class NotionConnector {
       ].join("-");
     }
 
-    return id;
+    return apiKey;
   }
 }
