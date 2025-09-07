@@ -2,6 +2,7 @@
   "name": "telegramchatarchiver",
   "module": "src/app.ts",
   "type": "module",
+  "version": "0.1.1",
   "scripts": {
     "start": "bun run src/app.ts"
   },
@@ -9,10 +10,10 @@
     "@types/bun": "latest"
   },
   "peerDependencies": {
-    "typescript": "^5.7.3"
+    "typescript": "^5.9.2"
   },
   "dependencies": {
-    "@notionhq/client": "^2.2.15",
-    "grammy": "^1.34.1"
+    "@notionhq/client": "^2.3.0",
+    "grammy": "^1.38.2"
   }
 }

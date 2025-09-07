@@ -1,6 +1,6 @@
 import { Bot } from "grammy";
 import { fromTelegramMessage, type DbMessage } from "../types/db-message";
-import { NotionConnector } from "../databases/notion-connector";
+import { NotionConnector } from "../databases/notion/notion-connector";
 
 /**
  * TelegramBot instance is used to connect to the Telegram bot API and handle messages.

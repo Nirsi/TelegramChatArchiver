@@ -3,7 +3,8 @@ import type {
   CreatePageResponse,
   GetDatabaseResponse,
 } from "@notionhq/client/build/src/api-endpoints";
-import type { DbMessage } from "../types/db-message";
+import type { DbMessage } from "../../types/db-message";
+import { Structures } from "./structures";
 
 /**
  * NotionConnector is used to connect to the Notion database, where it`s shape is specified for this exact bot
@@ -41,8 +42,10 @@ export class NotionConnector {
       `Notion client initialized with id ${process.env.NOTION_TOKEN} and databaseId is set to ${this.databaseId}`,
     );
 
-    // Verify the database structure when the connector is created
-    this.verifyDatabaseStructure();
+    // Prepare/verify the database structure when the connector is created
+    this.PrepareDatabase().catch((err) => {
+      console.warn("Database preparation warning:", err?.message ?? err);
+    });
   }
 
   /**
@@ -86,6 +89,17 @@ export class NotionConnector {
       const actualProperty = databaseProperties[propName];
 
       if (!actualProperty) {
+        if (expectedType === "title") {
+          const hasSomeTitle = Object.values(databaseProperties).some(
+            (p: any) => (p as any).type === "title",
+          );
+          if (hasSomeTitle) {
+            console.warn(
+              `Expected title property "${propName}" not found, but a title property exists under a different name. Proceeding.`,
+            );
+            continue;
+          }
+        }
         issues.push(
           `Missing property: "${propName}" (should be type "${expectedType}")`,
         );
@@ -97,7 +111,9 @@ export class NotionConnector {
     }
 
     const unexpectedProperties = Object.keys(databaseProperties).filter(
-      (prop) => !this.expectedProperties.hasOwnProperty(prop),
+      (prop) =>
+        !this.expectedProperties.hasOwnProperty(prop) &&
+        (databaseProperties as any)[prop].type !== "title",
     );
     if (unexpectedProperties.length > 0) {
       issues.push(
@@ -131,6 +147,96 @@ export class NotionConnector {
       throw error;
     }
   }
+  
+  /**
+   * Prepares a notion database to be used by the bot.
+   * Database must be created first and then this function
+   * will ensure it has the correct structure.
+   */
+  public async PrepareDatabase() {
+    try {
+      const database = await this.getDatabase();
+      const dbProps: Record<string, any> = database.properties as any;
+
+      // Helper to build a Notion property schema from a simple type string
+      const makeSchema = (type: string) => {
+        switch (type) {
+          case "title":
+            return { title: {} };
+          case "number":
+            return { number: {} };
+          case "checkbox":
+            return { checkbox: {} };
+          case "rich_text":
+            return { rich_text: {} };
+          case "date":
+            return { date: {} };
+          default:
+            throw new Error(`Unsupported property type "${type}"`);
+        }
+      };
+
+      const updates: Record<string, any> = {};
+
+      // Special handling for the unique `title` property: Notion only allows one title property.
+      // If the expected `title`-type property is missing but another title exists under a different name,
+      // we cannot auto-rename it safely here; we will warn the user to rename it manually.
+      const expectedTitleName = Object.entries(this.expectedProperties).find(
+        ([, t]) => t === "title",
+      )?.[0];
+
+      if (expectedTitleName) {
+        const existingTitleEntry = Object.entries(dbProps).find(
+          ([, v]: [string, any]) => v.type === "title",
+        );
+        const hasExpectedTitle = !!dbProps[expectedTitleName];
+
+        if (!hasExpectedTitle) {
+          if (!existingTitleEntry) {
+            // No title in DB at all -> add the expected one
+            updates[expectedTitleName] = makeSchema("title");
+          } else if (existingTitleEntry[0] !== expectedTitleName) {
+            console.warn(
+              `A title property exists with the name "${existingTitleEntry[0]}", but "${expectedTitleName}" is expected. ` +
+                "Please rename the existing title property in Notion to match the expected name.",
+            );
+          }
+        }
+      }
+
+      // Ensure all other properties exist with correct types
+      for (const [name, type] of Object.entries(this.expectedProperties)) {
+        if (type === "title") continue; // handled above
+
+        const prop = dbProps[name] as any;
+        if (!prop) {
+          updates[name] = makeSchema(type);
+        } else if (prop.type !== type) {
+          console.warn(
+            `Property "${name}" has type "${prop.type}" but expected "${type}". Attempting to update.`,
+          );
+          updates[name] = makeSchema(type);
+        }
+      }
+
+      // Apply updates if needed
+      if (Object.keys(updates).length > 0) {
+        console.info(
+          `Updating Notion database properties: ${Object.keys(updates).join(", ")}`,
+        );
+        await this.notion.databases.update({
+          database_id: this.databaseId,
+          properties: updates as any,
+        } as any);
+      }
+
+      // Final verification
+      await this.verifyDatabaseStructure();
+    } catch (error) {
+      console.error("Error preparing database:", error);
+      throw error;
+    }
+  }
 
   /**
    * Create a new page in a database specific for DbMessage type
@@ -142,68 +248,19 @@ export class NotionConnector {
     dbMessage: DbMessage,
   ): Promise<CreatePageResponse> {
     try {
+      const db = await this.getDatabase();
+      const titlePropName =
+        Object.entries(db.properties).find(([, v]: [string, any]) => (v as any).type === "title")?.[0] || "groupName";
+      const props: any = Structures.MessageDbToProperties(dbMessage);
+      if (props.title && titlePropName !== "title") {
+        props[titlePropName] = props.title;
+        delete props.title;
+      }
       const response = await this.notion.pages.create({
         parent: {
           database_id: this.databaseId,
         },
-        properties: {
-          title: {
-            title: [
-              {
-                text: {
-                  content: dbMessage.chat.groupName,
-                },
-              },
-            ],
-          },
-          messageId: {
-            number: dbMessage.messageId,
-          },
-          isBot: {
-            checkbox: dbMessage.from.isBot,
-          },
-          firstName: {
-            rich_text: [
-              {
-                text: {
-                  content: dbMessage.from.firstName || "",
-                },
-              },
-            ],
-          },
-          lastName: {
-            rich_text: [
-              {
-                text: {
-                  content: dbMessage.from.lastName || "",
-                },
-              },
-            ],
-          },
-          username: {
-            rich_text: [
-              {
-                text: {
-                  content: dbMessage.from.username,
-                },
-              },
-            ],
-          },
-          date: {
-            date: {
-              start: dbMessage.date.toISOString(),
-            },
-          },
-          text: {
-            rich_text: [
-              {
-                text: {
-                  content: dbMessage.text,
-                },
-              },
-            ],
-          },
-        },
+        properties: props,
       });
       return response;
     } catch (error) {
