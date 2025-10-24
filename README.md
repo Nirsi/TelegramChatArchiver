@@ -19,3 +19,6 @@ Mind that this project might change drasticly as I found new ways to use the Tel
 2. I have the correct ID and the notion integration is added to the workspace, but still the bot says it cannot find the database.
    - The integration must be added to the database as well, adding it to the workspace is not enough.
    - Open the database in Notion. Click the triple dot menu "..." and under "Connections" select you integraiton to grant it aceess to the database.
+
+### Compatibility
+Current version work with Notion API v2025‑09‑03 (v5)
