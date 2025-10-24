@@ -2,6 +2,7 @@ import { Client } from "@notionhq/client";
 import type {
   CreatePageResponse,
   GetDatabaseResponse,
+  DataSourceObjectResponse,
 } from "@notionhq/client/build/src/api-endpoints";
 import type { DbMessage } from "../../types/db-message";
 import { Structures } from "./structures";
@@ -15,6 +16,7 @@ import { Structures } from "./structures";
 export class NotionConnector {
   private notion: Client;
   private databaseId: string;
+  private dataSourceId: string | null = null;
   private expectedProperties: Record<string, string> = {
     groupName: "title",
     messageId: "number",
@@ -36,6 +38,7 @@ export class NotionConnector {
 
     this.notion = new Client({
       auth: process.env.NOTION_TOKEN,
+      notionVersion: "2025-09-03",
     });
     this.databaseId = this.formatDatabaseId(process.env.NOTION_DATABASE_ID);
     console.log(
@@ -66,9 +69,52 @@ export class NotionConnector {
   }
 
   /**
+   * Retrieve the data source ID for the database
+   * In API version 2025-09-03, databases return data_sources array
+   * @returns A promise that resolves with the data source ID
+   * @throws Error if no data sources are found
+   */
+  private async getDataSourceId(): Promise<string> {
+    if (this.dataSourceId) {
+      return this.dataSourceId;
+    }
+
+    const database = await this.getDatabase();
+    if (database.object === "database" && "data_sources" in database) {
+      const dataSources = database.data_sources;
+      if (dataSources.length === 0) {
+        throw new Error("No data sources found for database");
+      }
+      // Use the first data source (most common case)
+      this.dataSourceId = dataSources[0].id;
+      return this.dataSourceId;
+    }
+    throw new Error("Could not retrieve data source ID from database");
+  }
+
+  /**
+   * Retrieve information about a data source
+   * @returns A promise that resolves with the data source information
+   * @throws Error if the data source retrieval fails
+   */
+  public async getDataSource(): Promise<DataSourceObjectResponse> {
+    try {
+      const dataSourceId = await this.getDataSourceId();
+      const response = (await this.notion.request({
+        method: "get",
+        path: `data_sources/${dataSourceId}`,
+      })) as DataSourceObjectResponse;
+      return response;
+    } catch (error) {
+      console.error("Error getting data source:", error);
+      throw error;
+    }
+  }
+
+  /**
    * Build database to be by the specifications.
    */
-  public async buildDatabase(): Promise<any> {}
+  public async buildDatabase(): Promise<any> { }
 
   /**
    * Verify the structure of the notion database to ensure it matches
@@ -77,11 +123,11 @@ export class NotionConnector {
    * @throws Error if the database structure has any issues
    */
   public async verifyDatabaseStructure() {
-    const database = await this.getDatabase();
+    const dataSource = await this.getDataSource();
     console.log("Verifying database structure...");
 
     const issues: string[] = [];
-    const databaseProperties = database.properties;
+    const databaseProperties = dataSource.properties;
 
     for (const [propName, expectedType] of Object.entries(
       this.expectedProperties,
@@ -133,13 +179,15 @@ export class NotionConnector {
   }
 
   /**
-   * Query a database
-   * @param databaseId The ID of the database to query
+   * Query a data source
    */
   public async queryDatabase() {
     try {
-      const response = await this.notion.databases.query({
-        database_id: this.databaseId,
+      const dataSourceId = await this.getDataSourceId();
+      const response = await this.notion.request({
+        method: "post",
+        path: `data_sources/${dataSourceId}/query`,
+        body: {},
       });
       return response;
     } catch (error) {
@@ -147,7 +195,7 @@ export class NotionConnector {
       throw error;
     }
   }
-  
+
   /**
    * Prepares a notion database to be used by the bot.
    * Database must be created first and then this function
@@ -155,8 +203,8 @@ export class NotionConnector {
    */
   public async PrepareDatabase() {
     try {
-      const database = await this.getDatabase();
-      const dbProps: Record<string, any> = database.properties as any;
+      const dataSource = await this.getDataSource();
+      const dbProps: Record<string, any> = dataSource.properties as any;
 
       // Helper to build a Notion property schema from a simple type string
       const makeSchema = (type: string) => {
@@ -198,7 +246,7 @@ export class NotionConnector {
           } else if (existingTitleEntry[0] !== expectedTitleName) {
             console.warn(
               `A title property exists with the name "${existingTitleEntry[0]}", but "${expectedTitleName}" is expected. ` +
-                "Please rename the existing title property in Notion to match the expected name.",
+              "Please rename the existing title property in Notion to match the expected name.",
             );
           }
         }
@@ -224,10 +272,14 @@ export class NotionConnector {
         console.info(
           `Updating Notion database properties: ${Object.keys(updates).join(", ")}`,
         );
-        await this.notion.databases.update({
-          database_id: this.databaseId,
-          properties: updates as any,
-        } as any);
+        const dataSourceId = await this.getDataSourceId();
+        await this.notion.request({
+          method: "patch",
+          path: `data_sources/${dataSourceId}`,
+          body: {
+            properties: updates,
+          },
+        });
       }
 
       // Final verification
@@ -248,18 +300,20 @@ export class NotionConnector {
     dbMessage: DbMessage,
   ): Promise<CreatePageResponse> {
     try {
-      const db = await this.getDatabase();
+      const dataSource = await this.getDataSource();
       const titlePropName =
-        Object.entries(db.properties).find(([, v]: [string, any]) => (v as any).type === "title")?.[0] || "groupName";
+        Object.entries(dataSource.properties).find(([, v]: [string, any]) => (v as any).type === "title")?.[0] || "groupName";
       const props: any = Structures.MessageDbToProperties(dbMessage);
       if (props.title && titlePropName !== "title") {
         props[titlePropName] = props.title;
         delete props.title;
       }
+      const dataSourceId = await this.getDataSourceId();
       const response = await this.notion.pages.create({
         parent: {
-          database_id: this.databaseId,
-        },
+          type: "data_source_id",
+          data_source_id: dataSourceId,
+        } as any,
         properties: props,
       });
       return response;

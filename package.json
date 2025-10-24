@@ -10,10 +10,10 @@
     "@types/bun": "latest"
   },
   "peerDependencies": {
-    "typescript": "^5.9.2"
+    "typescript": "^5.9.3"
   },
   "dependencies": {
-    "@notionhq/client": "^2.3.0",
-    "grammy": "^1.38.2"
+    "@notionhq/client": "^5.3.0",
+    "grammy": "^1.38.3"
   }
 }
